@@ -63,7 +63,19 @@
   start. When start is equal to end, returns empty list."
   (cond
    ((= (length args) 0)
-    (cljs-el-iterate '1+ 0))))
+    (cljs-el-iterate '1+ 0))
+   ((= (length args) 2)
+    (destructuring-bind (start end) args
+      (if (< start end)
+	  (cljs-el-lazy-cons (message "range %d %d" start end)
+			     :car start
+			     :cdr-fn (lambda () (cljs-el-range (1+ start) end))))))))
+
+(defun cljs-el-cycle (coll)
+  (when (cljs-el-seq coll)
+    (cljs-el-lazy-cons "cycle"
+		       :car (cljs-el-car coll)
+		       
 
 (defun cljs-el-seq (coll)
   "Returns a something compatible with cljs-el-lazy-cons. If the collection is
@@ -96,6 +108,8 @@ items, returns val and f is not called."
       (if (cljs-el-seq coll)
 	  (cljs-el-reduce f (funcall f value (cljs-el-car coll)) (cljs-el-cdr coll))
 	value))))
+
+(defun 
 
 (provide 'cljs-el)
 ;;; cljs-el.el ends here

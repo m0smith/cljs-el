@@ -71,11 +71,16 @@
 			     :car start
 			     :cdr-fn (lambda () (cljs-el-range (1+ start) end))))))))
 
+(defun cljs-el-cycle* (coll orig-coll)
+  (if (cljs-el-seq coll)
+      (cljs-el-lazy-cons "cycle*"
+			 :car (cljs-el-car coll)
+			 :cdr-fn (lambda () (cljs-el-cycle* (cljs-el-cdr coll) orig-coll)))
+    (cljs-el-cycle* orig-coll orig-coll)))
+
 (defun cljs-el-cycle (coll)
   (when (cljs-el-seq coll)
-    (cljs-el-lazy-cons "cycle"
-		       :car (cljs-el-car coll)
-		       
+    (cljs-el-cycle* coll coll)))
 
 (defun cljs-el-seq (coll)
   "Returns a something compatible with cljs-el-lazy-cons. If the collection is
@@ -90,6 +95,16 @@
     (cljs-el-lazy-cons "take"
 		       :car (cljs-el-car coll)
 		       :cdr-fn (lambda () (cljs-el-take (1- n) (cljs-el-cdr coll))))))
+
+(defun cljs-el-take-while (pred coll)
+  "Returns a lazy sequence of the first n items in coll, or all items if
+  there are fewer than n."
+  (when (and pred (cljs-el-seq coll))
+    (let ((value (cljs-el-car coll)))
+      (when (funcall pred value)
+	(cljs-el-lazy-cons "take-while"
+			   :car (cljs-el-car coll)
+			   :cdr-fn (lambda () (cljs-el-take-while pred (cljs-el-cdr coll))))))))
 
 (defun cljs-el-reduce (f &rest args)
 " f should be a function of 2 arguments. If val is not supplied,
@@ -109,7 +124,16 @@ items, returns val and f is not called."
 	  (cljs-el-reduce f (funcall f value (cljs-el-car coll)) (cljs-el-cdr coll))
 	value))))
 
-(defun 
+(defun cljs-el-vec (coll)
+  (apply 'vector  (reverse (cljs-el-reduce (lambda (accum val) (cons val accum)) '() coll))))
+
+(defun cljs-el-map (f &rest colls)
+  (if (< 0 (length colls))
+      (destructuring-bind (coll) colls
+	(if (cljs-el-seq coll)
+	    (cljs-el-lazy-cons "map"
+			       :car (funcall f (cljs-el-car coll))
+			       :cdr-fn (lambda() (cljs-el-map f (cljs-el-cdr coll))))))))
 
 (provide 'cljs-el)
 ;;; cljs-el.el ends here

@@ -66,10 +66,7 @@
     (cljs-el-iterate '1+ 0))
    ((= (length args) 2)
     (destructuring-bind (start end) args
-      (if (< start end)
-	  (cljs-el-lazy-cons (message "range %d %d" start end)
-			     :car start
-			     :cdr-fn (lambda () (cljs-el-range (1+ start) end))))))))
+      (number-sequence start (1- end))))))
 
 (defun cljs-el-cycle* (coll orig-coll)
   (if (cljs-el-seq coll)
@@ -120,12 +117,26 @@ items, returns val and f is not called."
       (let ((coll (car args)))
 	(cljs-el-reduce f (cljs-el-car coll) (cljs-el-cdr coll)))
     (destructuring-bind (value coll) args
-      (if (cljs-el-seq coll)
-	  (cljs-el-reduce f (funcall f value (cljs-el-car coll)) (cljs-el-cdr coll))
-	value))))
+      (let ((accum value))
+	(while (cljs-el-seq coll)
+	  (setq accum (funcall f accum (cljs-el-car coll)))
+	  (setq coll (cljs-el-cdr coll)))
+	accum))))
 
 (defun cljs-el-vec (coll)
-  (apply 'vector  (reverse (cljs-el-reduce (lambda (accum val) (cons val accum)) '() coll))))
+  (apply 'vector  (cljs-el-list coll)))
+
+(defun cljs-el-list (coll)
+  (reverse (cljs-el-reduce (lambda (accum val) (cons val accum)) '() coll)))
+
+(defun cljs-el-filter (pred coll)
+  (if (cljs-el-lazy-cons-p coll)
+      	(while (and (cljs-el-seq coll) (funcall pred (cljs-el-car coll)))
+	  (setq coll (cljs-el-cdr coll)))
+    (-filter pred coll)))
+
+	  
+
 
 (defun cljs-el-map (f &rest colls)
   (if (< 0 (length colls))

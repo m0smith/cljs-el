@@ -2,5 +2,6 @@
   (should (equal '(1 2) (cljs-el-cons 1 '(2)))))
 
 (ert-deftest test-cljs-el-car ()
+  (should (equal '(1 2) (cljs-el-car [(1 2)] ))))
   (should (equal 1 (cljs-el-car  '(1 2))))
   (should (equal 1 (cljs-el-car (cljs-el-lazy-cons "test-car" :car 1 :cdr-fn nil)))))

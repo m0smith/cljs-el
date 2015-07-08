@@ -41,14 +41,15 @@
   (cons item coll))
 
 (defun cljs-el-car (coll)
-  (if (cljs-el-lazy-cons-p coll)
-      (cljs-el-lazy-cons-car coll)
-    (car coll)))
+  (cond ((cljs-el-lazy-cons-p coll) (cljs-el-lazy-cons-car coll))
+	((listp coll) (car coll))
+	((arrayp coll) (when (<  0 (length coll)) (elt coll 0)))
+	(t (error "Unknown type %s" coll))))
 
 (defun cljs-el-cdr (coll)
-  (if (cljs-el-lazy-cons-p coll)
-      (cljs-el-lazy-cons-cdr coll)
-    (cdr coll)))
+  (cond ((cljs-el-lazy-cons-p coll)  (cljs-el-lazy-cons-cdr coll))
+	 ((arrayp coll) (when (< 1 (length coll)) (subseq coll 1)))
+	 (t  (cdr coll))))
 
 
 (defun cljs-el-iterate (f x)

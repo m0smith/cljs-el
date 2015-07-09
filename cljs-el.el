@@ -1,4 +1,4 @@
-;;; cljs-el.el --- Enough of the ClojureScript core in EMACS lisp to get test.check working in elisp  -*- lexical-binding: t; -*-
+;; cljs-el.el --- Enough of the ClojureScript core in EMACS lisp to get test.check working in elisp  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2015  Matthew O. Smith
 
@@ -37,25 +37,56 @@
     (when cdr-fn
       (funcall cdr-fn))))
 
+
+;;
+;;  The CAR of a chunk is a list of values
+;;  The CDR is a thunk to the next lazy chunk
+
+(defclass cljs-el-lazy-chunk (cljs-el-lazy-cons)
+  ((car :initarg :car)
+   (cdr-fn :initarg :cdr-fn)))
+
+(defmethod cljs-el-lazy-cons-car ((obj cljs-el-lazy-chunk))
+  (let ((chunk (oref obj :car)))
+    (car chunk)))
+
+
+(defmethod cljs-el-lazy-cons-cdr ((obj cljs-el-lazy-chunk))
+  (let ((chunk (oref obj :car)))
+    (if (cdr chunk)
+	(oset obj :car (cdr chunk))
+      (let ((next-chunk (funcall (oref obj :cdr-fn))))
+	(oset obj :car (oref next-chunk :car))
+	(oset obj :cdr-fn (oref next-chunk :cdr-fn))))
+    obj))
+
+	
+
 (defun cljs-el-cons (item coll)
   (cons item coll))
 
 (defun cljs-el-car (coll)
-  (cond ((cljs-el-lazy-cons-p coll) (cljs-el-lazy-cons-car coll))
+  (cond ((cljs-el-lazy-cons-child-p coll) (cljs-el-lazy-cons-car coll))
 	((listp coll) (car coll))
 	((arrayp coll) (when (<  0 (length coll)) (elt coll 0)))
 	(t (error "Unknown type %s" coll))))
 
 (defun cljs-el-cdr (coll)
-  (cond ((cljs-el-lazy-cons-p coll)  (cljs-el-lazy-cons-cdr coll))
+  (cond ((cljs-el-lazy-cons-child-p coll)  (cljs-el-lazy-cons-cdr coll))
 	 ((arrayp coll) (when (< 1 (length coll)) (subseq coll 1)))
 	 (t  (cdr coll))))
 
 
 (defun cljs-el-iterate (f x)
-  "Returns a lazy sequence of x, (f x), (f (f x)) etc. f must be free of side-effects"
-  (let ((rtnval (funcall f x)))
-    (cljs-el-lazy-cons "iterate" :car rtnval :cdr-fn (lambda () (cljs-el-iterate f rtnval)))))
+  "Returns a chunked lazy sequence of x, (f x), (f (f x)) etc. f must be free of side-effects"
+  (let ((rtnval (list x)))
+    (dotimes (_ 32 rtnval)
+      (setq rtnval (cons (funcall f (car rtnval)) rtnval)))
+    (let ((c (car rtnval)))
+      (cljs-el-lazy-chunk "iterate" 
+			  :car (nreverse rtnval)
+			  :cdr-fn (lambda () (cljs-el-iterate f (funcall f c)))))))
+
 
 (defun cljs-el-range (&rest args)
   "Returns a lazy seq of nums from start (inclusive) to end
@@ -67,7 +98,9 @@
     (cljs-el-iterate '1+ 0))
    ((= (length args) 2)
     (destructuring-bind (start end) args
-      (number-sequence start (1- end))))))
+      (if (= start end)
+	  '()
+	(number-sequence start (1- end)))))))
 
 (defun cljs-el-cycle* (coll orig-coll)
   (if (cljs-el-seq coll)
@@ -83,7 +116,7 @@
 (defun cljs-el-seq (coll)
   "Returns a something compatible with cljs-el-lazy-cons. If the collection is
     empty, returns nil.  (seq nil) returns nil. "
-  (or (cljs-el-lazy-cons-p coll)
+  (or (cljs-el-lazy-cons-child-p coll)
       (and (sequencep coll) coll)))
   
 (defun cljs-el-take (n coll)
@@ -131,12 +164,15 @@ items, returns val and f is not called."
   (reverse (cljs-el-reduce (lambda (accum val) (cons val accum)) '() coll)))
 
 (defun cljs-el-filter (pred coll)
-  (if (cljs-el-lazy-cons-p coll)
-      	(while (and (cljs-el-seq coll) (funcall pred (cljs-el-car coll)))
-	  (setq coll (cljs-el-cdr coll)))
-    (-filter pred coll)))
-
-	  
+  (when (and pred (cljs-el-seq coll))
+    (let ((the-car (cljs-el-car coll)))
+      (while (and (cljs-el-seq coll) (not (funcall pred the-car)))
+	(setq coll (cljs-el-cdr coll))
+	(setq the-car (cljs-el-car coll)))
+      (when (cljs-el-seq coll)
+	(cljs-el-lazy-cons "filter"
+			   :car the-car
+			   :cdr-fn (lambda () (cljs-el-filter pred (cljs-el-cdr coll))))))))
 
 
 (defun cljs-el-map (f &rest colls)

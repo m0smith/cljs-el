@@ -116,8 +116,11 @@
 (defun cljs-el-seq (coll)
   "Returns a something compatible with cljs-el-lazy-cons. If the collection is
     empty, returns nil.  (seq nil) returns nil. "
-  (or (cljs-el-lazy-cons-child-p coll)
-      (and (sequencep coll) coll)))
+  (when coll
+    (cond ((cljs-el-lazy-cons-child-p coll) coll)
+	  ((listp coll) coll)
+	  ((and (arrayp coll) (< 0 (length coll))) coll))))
+	  
   
 (defun cljs-el-take (n coll)
   "Returns a lazy sequence of the first n items in coll, or all items if

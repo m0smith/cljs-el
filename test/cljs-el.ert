@@ -1,3 +1,8 @@
+(require 'cljs-el)
+(require 'tcel-test)
+(require 'tcel-properties)
+(require 'tcel-check)
+
 (ert-deftest test-cljs-el-cons ()
   (should (equal '(1 2) (cljs-el-cons 1 '(2)))))
 
@@ -5,3 +10,55 @@
   (should (equal '(1 2) (cljs-el-car [(1 2)] ))))
   (should (equal 1 (cljs-el-car  '(1 2))))
   (should (equal 1 (cljs-el-car (cljs-el-lazy-cons "test-car" :car 1 :cdr-fn nil)))))
+
+
+(ert-deftest test-cljs-el-iterate ()
+  (should (equal 0 (cljs-el-car (cljs-el-iterate '1+ 0)))))
+
+
+(defun cljs-el-lazy-cons-generator ()
+  (tcel-generator-one-of (list (tcel-generator-list   (tcel-generator-int))
+			       (tcel-generator-vector (tcel-generator-int))
+)))
+
+
+(tcel-test-defspec test-cljs-el-cons-prop
+		   (tcel-properties-for-all (a (tcel-generator-int)
+					     b (tcel-generator-list (tcel-generator-int)))
+					    (let ((r (cljs-el-cons a b)))
+					      (= (car r) a))))
+
+
+(tcel-test-defspec test-cljs-el-car-list-prop
+		   (tcel-properties-for-all (a (tcel-generator-int)
+					     b (tcel-generator-list (tcel-generator-int)))
+					    (let ((r (cons a b)))
+					      (= (cljs-el-car r) a))))
+
+
+(tcel-test-defspec test-cljs-el-car-vector-prop
+		   (tcel-properties-for-all (a (tcel-generator-int)
+					     b (tcel-generator-vector (tcel-generator-int)))
+					    (let ((r (vconcat (vector a) b)))
+					      (= (cljs-el-car r) a))))
+
+
+(tcel-test-defspec test-cljs-el-car-lazy-cons-prop
+		   (tcel-properties-for-all (a (tcel-generator-int))
+					     
+					    (let ((r (cljs-el-lazy-cons "test-cljs-el-car-lazy-cons-prop" 
+									:car a 
+									:cdr-fn nil)))
+					      (= (cljs-el-car r) a))))
+
+
+(tcel-test-defspec test-cljs-el-car-chunked-lazy-cons-prop
+		   (tcel-properties-for-all (a (tcel-generator-int)
+					     b (tcel-generator-list (tcel-generator-int)))
+					    (let ((r (cljs-el-lazy-chunk "test-cljs-el-car-chunked-lazy-cons-prop" 
+									 :car (cons a b )
+									 :cdr-fn nil)))
+					      (= (cljs-el-car r) a))))
+
+
+

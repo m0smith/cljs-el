@@ -25,40 +25,92 @@
 ;;; Code:
 
 
-(defclass cljs-el-lazy-cons ()
-  ((car :initarg :car)
-   (cdr-fn :initarg :cdr-fn)))
+;; (defclass cljs-el-lazy-cons-class ()
+;;   ((car :initarg :car)
+;;    (cdr-fn :initarg :cdr-fn)))
 
-(defmethod cljs-el-lazy-cons-car ((obj cljs-el-lazy-cons))
-  (oref obj :car))
+;; (defmethod cljs-el-lazy-cons-car ((obj cljs-el-lazy-cons))
+;;   (oref obj :car))
 
-(defmethod cljs-el-lazy-cons-cdr ((obj cljs-el-lazy-cons))
-  (let ((cdr-fn (oref obj :cdr-fn)))
+;; (defmethod cljs-el-lazy-cons-cdr ((obj cljs-el-lazy-cons))
+;;   (let ((cdr-fn (oref obj :cdr-fn)))
+;;     (when cdr-fn
+;;       (funcall cdr-fn))))
+
+(defun cljs-el-lazy-cons (name &rest args)
+  "Return a vector with ['cljs-el-lazy-cons name car cdr-fn]"
+  (let ((l (length args)))
+    (assert (or (= l 2) (= l 4)) nil "Args must be 2 or 4 elements")
+    (if (= 2 l) 
+	(vector 'cljs-el-lazy-cons name (elt args 0) (elt args 1))
+      (vector 'cljs-el-lazy-cons name (plist-get args :car) (plist-get args :cdr-fn)))))
+
+
+(defun cljs-el-lazy-cons-car (cn)
+  (elt cn 2))
+
+(defun cljs-el-lazy-cons-cdr (cn)
+  (let ((cdr-fn (elt cn 3)))
     (when cdr-fn
       (funcall cdr-fn))))
+
+(defun cljs-el-lazy-cons-p (cn)
+  (and (vectorp cn)
+       (= 4 (length cn))
+       (eq (elt cn 0) 'cljs-el-lazy-cons)))
 
 
 ;;
 ;;  The CAR of a chunk is a list of values
 ;;  The CDR is a thunk to the next lazy chunk
 
-(defclass cljs-el-lazy-chunk (cljs-el-lazy-cons)
-  ((car :initarg :car)
-   (cdr-fn :initarg :cdr-fn)))
+;; (defclass cljs-el-lazy-chunk-class (cljs-el-lazy-cons-class)
+;;   ((car :initarg :car)
+;;    (cdr-fn :initarg :cdr-fn)))
 
-(defmethod cljs-el-lazy-cons-car ((obj cljs-el-lazy-chunk))
-  (let ((chunk (oref obj :car)))
+;; (defmethod cljs-el-lazy-cons-car ((obj cljs-el-lazy-chunk-class))
+;;   (let ((chunk (oref obj :car)))
+;;     (car chunk)))
+
+
+;; (defmethod cljs-el-lazy-cons-cdr ((obj cljs-el-lazy-chunk-class))
+;;   (let ((chunk (oref obj :car)))
+;;     (if (cdr chunk)
+;; 	(oset obj :car (cdr chunk))
+;;       (let ((next-chunk (funcall (oref obj :cdr-fn))))
+;; 	(oset obj :car (oref next-chunk :car))
+;; 	(oset obj :cdr-fn (oref next-chunk :cdr-fn))))
+;;     obj))
+
+;; ;;
+
+	  
+(defun cljs-el-lazy-chunk (name &rest args)
+  "Return a vector with ['cljs-el-lazy-chunk name car cdr-fn]"
+  (let ((l (length args)))
+    (assert (or (= l 2) (= l 4)) nil "Args must be 2 or 4 elements")
+    (if (= 2 l) 
+	(vector 'cljs-el-lazy-chunk name (elt args 0) (elt args 1))
+      (vector 'cljs-el-lazy-chunk name (plist-get args :car) (plist-get args :cdr-fn)))))
+
+
+(defun cljs-el-lazy-chunk-car (obj)
+  (let ((chunk (elt obj 2)))
     (car chunk)))
 
-
-(defmethod cljs-el-lazy-cons-cdr ((obj cljs-el-lazy-chunk))
-  (let ((chunk (oref obj :car)))
+(defmethod cljs-el-lazy-chunk-cdr (obj)
+  (let ((chunk (elt obj 2)))
     (if (cdr chunk)
-	(oset obj :car (cdr chunk))
-      (let ((next-chunk (funcall (oref obj :cdr-fn))))
-	(oset obj :car (oref next-chunk :car))
-	(oset obj :cdr-fn (oref next-chunk :cdr-fn))))
+	(aset obj 2 (cdr chunk))
+      (let ((next-chunk (funcall (elt obj 3))))
+	(aset obj 2 (elt next-chunk 2))
+	(aset obj 3 (elt next-chunk 3))))
     obj))
+
+(defun cljs-el-lazy-chunk-p (cn)
+  (and (vectorp cn)
+       (= 4 (length cn))
+       (eq (elt cn 0) 'cljs-el-lazy-chunk)))
 
 	
 
@@ -66,13 +118,15 @@
   (cons item coll))
 
 (defun cljs-el-car (coll)
-  (cond ((cljs-el-lazy-cons-child-p coll) (cljs-el-lazy-cons-car coll))
+  (cond ((cljs-el-lazy-cons-p coll) (cljs-el-lazy-cons-car coll))	
+	((cljs-el-lazy-chunk-p coll) (cljs-el-lazy-chunk-car coll))
 	((listp coll) (car coll))
 	((arrayp coll) (when (<  0 (length coll)) (elt coll 0)))
 	(t (error "Unknown type %s" coll))))
 
 (defun cljs-el-cdr (coll)
-  (cond ((cljs-el-lazy-cons-child-p coll)  (cljs-el-lazy-cons-cdr coll))
+  (cond ((cljs-el-lazy-cons-p coll)  (cljs-el-lazy-cons-cdr coll))
+	((cljs-el-lazy-chunk-p coll)  (cljs-el-lazy-chunk-cdr coll))
 	 ((arrayp coll) (when (< 1 (length coll)) (subseq coll 1)))
 	 (t  (cdr coll))))
 
@@ -117,7 +171,8 @@
   "Returns a something compatible with cljs-el-lazy-cons. If the collection is
     empty, returns nil.  (seq nil) returns nil. "
   (when coll
-    (cond ((cljs-el-lazy-cons-child-p coll) coll)
+    (cond ((cljs-el-lazy-cons-p coll) coll)
+	  ((cljs-el-lazy-chunk-p coll) coll)
 	  ((listp coll) coll)
 	  ((and (arrayp coll) (< 0 (length coll))) coll))))
 	  

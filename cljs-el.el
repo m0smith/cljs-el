@@ -131,6 +131,21 @@
 	 (t  (cdr coll))))
 
 
+(defun cljs-el-conj (coll x &rest xs)
+  "conj[oin]. Returns a new collection with the xs 'added'. (conj
+    nil item) returns (item).  The 'addition' may happen at
+    different 'places' depending on the concrete type.
+
+EMACS lists have the elements added at the first ala `cons' while array types have the elements added at the end."
+      (cond ((cljs-el-lazy-cons-p coll)  (cljs-el-lazy-chunk "conj" (cons x xs) (elt coll 3)))
+	    ((cljs-el-lazy-chunk-p coll) (cljs-el-lazy-chunk "conj" (cons x xs) (elt coll 3)))
+	    ((listp coll) (reduce (lambda (c a) (cons a c)) xs :initial-value (cons x coll)))
+	    ((vectorp coll) (vconcat coll (vector x) (when xs (apply 'vector xs))))
+	    (t (error "Unknown type %s %s" (typeof coll) ))))
+    
+
+  
+
 (defun cljs-el-iterate (f x)
   "Returns a chunked lazy sequence of x, (f x), (f (f x)) etc. f must be free of side-effects"
   (let ((rtnval (list x)))

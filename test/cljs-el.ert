@@ -7,7 +7,7 @@
   (should (equal '(1 2) (cljs-el-cons 1 '(2)))))
 
 (ert-deftest test-cljs-el-car ()
-  (should (equal '(1 2) (cljs-el-car [(1 2)] ))))
+  (should (equal '(1 2) (cljs-el-car [(1 2)] )))
   (should (equal 1 (cljs-el-car  '(1 2))))
   (should (equal 1 (cljs-el-car (cljs-el-lazy-cons "test-car" :car 1 :cdr-fn nil)))))
 
@@ -59,6 +59,24 @@
 									 :car (cons a b )
 									 :cdr-fn nil)))
 					      (= (cljs-el-car r) a))))
+
+
+(tcel-test-defspec test-cljs-el-conj-list-prop
+		   (tcel-properties-for-all (coll (tcel-generator-list (tcel-generator-int))
+						  x (tcel-generator-int)
+						  xs (tcel-generator-list (tcel-generator-int)))
+					     
+					    (let ((r (apply 'cljs-el-conj coll x xs)))
+					      (equal r (append (reverse xs) (list x) coll)))))
+
+
+(tcel-test-defspec test-cljs-el-conj-vector-prop
+		   (tcel-properties-for-all (coll (tcel-generator-vector (tcel-generator-int))
+						  x (tcel-generator-int)
+						  xs (tcel-generator-list (tcel-generator-int)))
+					     
+					    (let ((r (apply 'cljs-el-conj coll x xs)))
+					      (equal r (vconcat coll (vector x) (when xs (apply 'vector xs)))))))
 
 
 

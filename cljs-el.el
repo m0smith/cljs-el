@@ -136,14 +136,22 @@
     nil item) returns (item).  The 'addition' may happen at
     different 'places' depending on the concrete type.
 
-EMACS lists have the elements added at the first ala `cons' while array types have the elements added at the end."
+   EMACS lists have the elements added at the first ala `cons' while
+   array types have the elements added at the end."
       (cond ((cljs-el-lazy-cons-p coll)  (cljs-el-lazy-chunk "conj" (cons x xs) (elt coll 3)))
 	    ((cljs-el-lazy-chunk-p coll) (cljs-el-lazy-chunk "conj" (cons x xs) (elt coll 3)))
-	    ((listp coll) (reduce (lambda (c a) (cons a c)) xs :initial-value (cons x coll)))
-	    ((vectorp coll) (vconcat coll (vector x) (when xs (apply 'vector xs))))
+	    ((listp coll) (if xs
+			      (cljs-el-reduce3 (lambda (c a) (cons a c)) (cons x coll) xs)
+			    (cons x coll)))
+	    ((vectorp coll) (vconcat coll (vector x) (when xs (cljs-el-vec  xs))))
 	    (t (error "Unknown type %s %s" (typeof coll) ))))
     
 
+(defun cljs-el-into (to-coll from-coll)
+  "Returns a new coll consisting of TO-COLL with all of the items of
+  FROM-COLL conjoined."
+    
+  (funcall 'cljs-el-conj to-coll (cljs-el-car from-coll) (cljs-el-cdr from-coll)))
   
 
 (defun cljs-el-iterate (f x)
@@ -210,8 +218,15 @@ EMACS lists have the elements added at the first ala `cons' while array types ha
 			   :car (cljs-el-car coll)
 			   :cdr-fn (lambda () (cljs-el-take-while pred (cljs-el-cdr coll))))))))
 
-(defun cljs-el-reduce (f &rest args)
-" f should be a function of 2 arguments. If val is not supplied,
+(defun cljs-el-reduce2 (f coll)
+  (let ((value (cljs-el-car coll))
+	(rest  (cljs-el-cdr coll)))
+    (if (cljs-el-seq rest)
+	(cljs-el-reduce3 f value rest)
+      value)))
+
+(defun cljs-el-reduce3 (f value coll)
+  " f should be a function of 2 arguments. If val is not supplied,
 returns the result of applying f to the first 2 items in coll, then
 applying f to that result and the 3rd item, etc. If coll contains no
 items, f must accept no arguments as well, and reduce returns the
@@ -220,21 +235,18 @@ is returned and f is not called.  If val is supplied, returns the
 result of applying f to val and the first item in coll, then
 applying f to that result and the 2nd item, etc. If coll contains no
 items, returns val and f is not called."
-  (if (= 1 (length args))
-      (let ((coll (car args)))
-	(cljs-el-reduce f (cljs-el-car coll) (cljs-el-cdr coll)))
-    (destructuring-bind (value coll) args
-      (let ((accum value))
-	(while (cljs-el-seq coll)
-	  (setq accum (funcall f accum (cljs-el-car coll)))
-	  (setq coll (cljs-el-cdr coll)))
-	accum))))
+  (let ((accum value))
+    (while (cljs-el-seq coll)
+      (setq accum (funcall f accum (cljs-el-car coll)))
+      (setq coll (cljs-el-cdr coll)))
+    accum))
 
 (defun cljs-el-vec (coll)
   (apply 'vector  (cljs-el-list coll)))
 
 (defun cljs-el-list (coll)
-  (reverse (cljs-el-reduce (lambda (accum val) (cons val accum)) '() coll)))
+  (when coll 
+    (reverse (cljs-el-reduce3 (lambda (accum val) (cons val accum)) '() coll))))
 
 (defun cljs-el-filter (pred coll)
   (when (and pred (cljs-el-seq coll))

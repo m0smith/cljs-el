@@ -67,7 +67,7 @@
 						  xs (tcel-generator-list (tcel-generator-int)))
 					     
 					    (let ((r (apply 'cljs-el-conj coll x xs)))
-					      (equal r (append (reverse xs) (list x) coll)))))
+					      (should (equal r (append (reverse xs) (list x) coll))))))
 
 
 (tcel-test-defspec test-cljs-el-conj-vector-prop
@@ -77,6 +77,21 @@
 					     
 					    (let ((r (apply 'cljs-el-conj coll x xs)))
 					      (equal r (vconcat coll (vector x) (when xs (apply 'vector xs)))))))
+
+(tcel-test-defspec test-cljs-el-into-list-prop
+		   (tcel-properties-for-all (coll (tcel-generator-list (tcel-generator-int))
+						  xs (tcel-generator-list (tcel-generator-int)))
+					     
+					    (let ((r (apply 'cljs-el-into coll xs)))
+					      (equal r (append (reverse xs) coll)))))
+
+
+(tcel-test-defspec test-cljs-el-into-vector-prop
+		   (tcel-properties-for-all (coll (tcel-generator-vector (tcel-generator-int))
+						  xs (tcel-generator-list (tcel-generator-int)))
+					     
+					    (let ((r (apply 'cljs-el-into coll xs)))
+					      (should (equal r (vconcat coll  (when xs (apply 'vector xs))))))))
 
 
 

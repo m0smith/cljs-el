@@ -82,7 +82,7 @@
 		   (tcel-properties-for-all (coll (tcel-generator-list (tcel-generator-int))
 						  xs (tcel-generator-list (tcel-generator-int)))
 					     
-					    (let ((r (apply 'cljs-el-into coll xs)))
+					    (let ((r (cljs-el-into coll xs)))
 					      (equal r (append (reverse xs) coll)))))
 
 
@@ -90,7 +90,7 @@
 		   (tcel-properties-for-all (coll (tcel-generator-vector (tcel-generator-int))
 						  xs (tcel-generator-list (tcel-generator-int)))
 					     
-					    (let ((r (apply 'cljs-el-into coll xs)))
+					    (let ((r (cljs-el-into coll xs)))
 					      (should (equal r (vconcat coll  (when xs (apply 'vector xs))))))))
 
 

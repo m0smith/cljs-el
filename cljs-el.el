@@ -150,8 +150,9 @@
 (defun cljs-el-into (to-coll from-coll)
   "Returns a new coll consisting of TO-COLL with all of the items of
   FROM-COLL conjoined."
-    
-  (funcall 'cljs-el-conj to-coll (cljs-el-car from-coll) (cljs-el-cdr from-coll)))
+  (if from-coll
+      (apply 'cljs-el-conj to-coll (cljs-el-car from-coll) (cljs-el-cdr from-coll))
+    to-coll))
   
 
 (defun cljs-el-iterate (f x)

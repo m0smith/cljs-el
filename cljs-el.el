@@ -37,6 +37,9 @@
 ;;     (when cdr-fn
 ;;       (funcall cdr-fn))))
 
+(defcustom cljs-el-chunk-size 32
+  "The default size for a chunked element")
+
 (defun cljs-el-lazy-cons (name &rest args)
   "Return a vector with ['cljs-el-lazy-cons name car cdr-fn]"
   (let ((l (length args)))
@@ -158,7 +161,7 @@
 (defun cljs-el-iterate (f x)
   "Returns a chunked lazy sequence of x, (f x), (f (f x)) etc. f must be free of side-effects"
   (let ((rtnval (list x)))
-    (dotimes (_ 32 rtnval)
+    (dotimes (_ cljs-el-chunk-size rtnval)
       (setq rtnval (cons (funcall f (car rtnval)) rtnval)))
     (let ((c (car rtnval)))
       (cljs-el-lazy-chunk "iterate" 
@@ -174,6 +177,8 @@
   (cond
    ((= (length args) 0)
     (cljs-el-iterate '1+ 0))
+   ((= (length args) 1)
+    (cljs-el-iterate '1+ (car args)))
    ((= (length args) 2)
     (destructuring-bind (start end) args
       (if (= start end)
@@ -268,6 +273,20 @@ items, returns val and f is not called."
 	    (cljs-el-lazy-cons "map"
 			       :car (funcall f (cljs-el-car coll))
 			       :cdr-fn (lambda() (cljs-el-map f (cljs-el-cdr coll))))))))
+
+(defun cljs-el-map-indexed (f coll &optional start)
+  (let ((start (or start 0)))
+    (cond ((listp coll)   (cl-map 'list f (number-sequence start (1- (length coll))) coll))
+	  ((cljs-el-lazy-cons-p coll) 
+	   (cljs-el-lazy-cons "map-indexed"
+			      :car (funcall f start (cljs-el-car coll))
+			      :cdr-fn (lambda() (cljs-el-map-indexed f (cljs-el-cdr coll) (1+ start)))))
+	  ((cljs-el-lazy-chunk-p coll) 
+	   (cljs-el-lazy-chunk "map-indexed"
+			       :car (funcall f (elt coll 2) start)
+			       :cdr-fn (lambda() (cljs-el-map-indexed f (funcall (elt coll 3) (+ cljs-el-chunk-size start))))))
+	  ((vectorp coll) (cl-map 'vector f (number-sequence start (1- (length coll))) coll)))))
+
 
 (provide 'cljs-el)
 ;;; cljs-el.el ends here

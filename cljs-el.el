@@ -283,7 +283,7 @@ items, returns val and f is not called."
 			      :cdr-fn (lambda() (cljs-el-map-indexed f (cljs-el-cdr coll) (1+ start)))))
 	  ((cljs-el-lazy-chunk-p coll) 
 	   (cljs-el-lazy-chunk "map-indexed"
-			       :car (funcall f (elt coll 2) start)
+			       :car (funcall f start (elt coll 2))
 			       :cdr-fn (lambda() (cljs-el-map-indexed f (funcall (elt coll 3) (+ cljs-el-chunk-size start))))))
 	  ((vectorp coll) (cl-map 'vector f (number-sequence start (1- (length coll))) coll)))))
 

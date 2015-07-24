@@ -95,3 +95,8 @@
 
 
 
+(tcel-test-defspec test-shrkink
+		   (tcel-properties-for-all (coll (tcel-generator-list (tcel-generator-int)))
+					    (should (every (lambda(x) (not ( = 6 x))) coll))))
+
+

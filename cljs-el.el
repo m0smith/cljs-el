@@ -41,16 +41,28 @@
   "The default size for a chunked element")
 
 (defun cljs-el-lazy-cons (name &rest args)
-  "Return a vector with ['cljs-el-lazy-cons name car cdr-fn]"
+  "Return a vector with ['cljs-el-lazy-cons name car-fn cdr-fn realized car]"
   (let ((l (length args)))
     (assert (or (= l 2) (= l 4)) nil "Args must be 2 or 4 elements")
     (if (= 2 l) 
-	(vector 'cljs-el-lazy-cons name (elt args 0) (elt args 1))
-      (vector 'cljs-el-lazy-cons name (plist-get args :car) (plist-get args :cdr-fn)))))
+	(vector 'cljs-el-lazy-cons name (elt args 0) (elt args 1) nil nil)
+      (vector 'cljs-el-lazy-cons name (plist-get args :car-fn) (plist-get args :cdr-fn) nil nil))))
+
+(defun cljs-el-lazy-cons-realizedp (cn)
+  (elt cn 4))
+
+(defun cljs-el-lazy-cons-car-fn (cn)
+  (elt cn 2))
 
 
 (defun cljs-el-lazy-cons-car (cn)
-  (elt cn 2))
+  (if (cljs-el-lazy-cons-realizedp cn)
+      (elt cn 5)
+    (let ((val (funcall (cljs-el-lazy-cons-car-fn cn))))
+      (aset cn 5 val)
+      (aset cn 4 t)
+      val)))
+
 
 (defun cljs-el-lazy-cons-cdr (cn)
   (let ((cdr-fn (elt cn 3)))
@@ -59,7 +71,7 @@
 
 (defun cljs-el-lazy-cons-p (cn)
   (and (vectorp cn)
-       (= 4 (length cn))
+       (= 6 (length cn))
        (eq (elt cn 0) 'cljs-el-lazy-cons)))
 
 
@@ -101,21 +113,23 @@
   (let ((chunk (elt obj 2)))
     (car chunk)))
 
-(defmethod cljs-el-lazy-chunk-cdr (obj)
+(defun cljs-el-lazy-chunk-cdr (obj)
   (let ((chunk (elt obj 2)))
     (if (cdr chunk)
 	(aset obj 2 (cdr chunk))
-      (let ((next-chunk (funcall (elt obj 3))))
-	(aset obj 2 (elt next-chunk 2))
-	(aset obj 3 (elt next-chunk 3))))
-    obj))
+      (when (elt obj 3)
+	(let ((next-chunk (funcall (elt obj 3))))
+	  (aset obj 2 (elt next-chunk 2))
+	  (aset obj 3 (elt next-chunk 3))
+	  obj)))))
 
 (defun cljs-el-lazy-chunk-p (cn)
   (and (vectorp cn)
        (= 4 (length cn))
        (eq (elt cn 0) 'cljs-el-lazy-chunk)))
 
-	
+(defun cljs-el-lazy-p (cn)
+  (or (cljs-el-lazy-chunk-p cn) (cljs-el-lazy-cons-p cn)))
 
 (defun cljs-el-cons (item coll)
   (cons item coll))
@@ -188,7 +202,7 @@
 (defun cljs-el-cycle* (coll orig-coll)
   (if (cljs-el-seq coll)
       (cljs-el-lazy-cons "cycle*"
-			 :car (cljs-el-car coll)
+			 :car-fn (lambda () (cljs-el-car coll))
 			 :cdr-fn (lambda () (cljs-el-cycle* (cljs-el-cdr coll) orig-coll)))
     (cljs-el-cycle* orig-coll orig-coll)))
 
@@ -211,7 +225,7 @@
   there are fewer than n."
   (when (and (> n 0) (cljs-el-seq coll))
     (cljs-el-lazy-cons "take"
-		       :car (cljs-el-car coll)
+		       :car-fn (lambda () (cljs-el-car coll))
 		       :cdr-fn (lambda () (cljs-el-take (1- n) (cljs-el-cdr coll))))))
 
 (defun cljs-el-take-while (pred coll)
@@ -221,7 +235,7 @@
     (let ((value (cljs-el-car coll)))
       (when (funcall pred value)
 	(cljs-el-lazy-cons "take-while"
-			   :car (cljs-el-car coll)
+			   :car-fn (lambda () (cljs-el-car coll))
 			   :cdr-fn (lambda () (cljs-el-take-while pred (cljs-el-cdr coll))))))))
 
 (defun cljs-el-reduce2 (f coll)
@@ -248,44 +262,83 @@ items, returns val and f is not called."
     accum))
 
 (defun cljs-el-vec (coll)
-  (apply 'vector  (cljs-el-list coll)))
+  (if (not (cljs-el-lazy-p coll))
+      (if (vectorp coll)
+	  coll
+	(apply 'vector coll)) ;assume a list
+    (apply 'vector  (cljs-el-list coll))))
 
 (defun cljs-el-list (coll)
-  (when coll 
-    (reverse (cljs-el-reduce3 (lambda (accum val) (cons val accum)) '() coll))))
+  "Convert a lazy cons into a regular list"
+  (when coll
+    (if (listp coll)
+	coll
+      (nreverse (cljs-el-reduce3 (lambda (accum val) (cons val accum)) '() coll)))))
 
 (defun cljs-el-filter (pred coll)
   (when (and pred (cljs-el-seq coll))
-    (let ((the-car (cljs-el-car coll)))
-      (while (and (cljs-el-seq coll) (not (funcall pred the-car)))
-	(setq coll (cljs-el-cdr coll))
-	(setq the-car (cljs-el-car coll)))
-      (when (cljs-el-seq coll)
-	(cljs-el-lazy-cons "filter"
-			   :car the-car
-			   :cdr-fn (lambda () (cljs-el-filter pred (cljs-el-cdr coll))))))))
+    (cond ((listp coll) (cl-remove nil coll :if-not pred))
+	  ((cljs-el-lazy-cons-p coll) 	  
+	   (when (cljs-el-seq coll)
+	     (cljs-el-lazy-cons "filter"
+				:car-fn (lambda () (cljs-el-car coll))
+				:cdr-fn (lambda () (cljs-el-filter pred (cljs-el-cdr coll))))))
+	  ((cljs-el-lazy-chunk-p coll) 	  
+	   (when (cljs-el-seq coll)
+	     (cljs-el-lazy-chunk "filter"
+				 :car (cljs-el-filter pred (elt coll 2))
+				 :cdr-fn (lambda () (cljs-el-filter pred (funcall (elt coll 3)))))))
+	  ((vector coll) (cl-remove-if-not pred coll)))))
+
+
+
+(defun cljs-el-map1 (f coll)
+  (when (cljs-el-seq coll)
+    (cond ((listp coll)   (cl-map 'list f coll))
+	  ((cljs-el-lazy-cons-p coll) 
+	   (cljs-el-lazy-cons "map1"
+			      :car-fn (lambda () (funcall f (cljs-el-car coll)))
+			      :cdr-fn (lambda() (cljs-el-map1 f (cljs-el-cdr coll)))))
+	   ((cljs-el-lazy-chunk-p coll) 
+	    (cljs-el-lazy-chunk "map1"
+				:car (mapcar f (elt coll 2))
+				:cdr-fn (lambda() (cljs-el-map1 f (funcall (elt coll 3))))))
+	   ((vectorp coll) (cl-map 'vector f  coll)))))
 
 
 (defun cljs-el-map (f &rest colls)
-  (if (< 0 (length colls))
-      (destructuring-bind (coll) colls
-	(if (cljs-el-seq coll)
+  (if (notany 'cljs-el-lazy-p colls)
+      (apply 'cl-map (type-of (car colls)) f colls)
+    
+    (if (= 1 (length colls))
+	(cljs-el-map1 f (car colls))
+      (when (< 0 (length colls))
+	(let ((seqs (mapcar 'cljs-el-seq colls)))
+	  (when (every 'identity seqs)
 	    (cljs-el-lazy-cons "map"
-			       :car (funcall f (cljs-el-car coll))
-			       :cdr-fn (lambda() (cljs-el-map f (cljs-el-cdr coll))))))))
+			       :car-fn (lambda () (apply f (mapcar 'cljs-el-car colls)))
+			       :cdr-fn (lambda() (apply 'cljs-el-map
+							f
+							(mapcar 'cljs-el-cdr colls))))))))))
+  
 
 (defun cljs-el-map-indexed (f coll &optional start)
-  (let ((start (or start 0)))
-    (cond ((listp coll)   (cl-map 'list f (number-sequence start (1- (length coll))) coll))
+  (let* ((start (or start 0))
+	 (len (if (cljs-el-lazy-chunk-p coll)
+		  (+ start cljs-el-chunk-size)
+		(+ start (1- (length coll)))))
+	 (indexes (number-sequence start len)))
+    
+    (cond ((listp coll)   (cl-map 'list f indexes coll))
 	  ((cljs-el-lazy-cons-p coll) 
 	   (cljs-el-lazy-cons "map-indexed"
-			      :car (funcall f start (cljs-el-car coll))
+			      :car-fn (lambda () (funcall f start (cljs-el-car coll)))
 			      :cdr-fn (lambda() (cljs-el-map-indexed f (cljs-el-cdr coll) (1+ start)))))
 	  ((cljs-el-lazy-chunk-p coll) 
 	   (cljs-el-lazy-chunk "map-indexed"
-			       :car (funcall f start (elt coll 2))
+			       :car (cljs-el-map f indexes (elt coll 2))
 			       :cdr-fn (lambda() (cljs-el-map-indexed f (funcall (elt coll 3) (+ cljs-el-chunk-size start))))))
-	  ((vectorp coll) (cl-map 'vector f (number-sequence start (1- (length coll))) coll)))))
+	  ((vectorp coll) (cl-map 'vector f indexes coll)))))
 
 
 (provide 'cljs-el)
